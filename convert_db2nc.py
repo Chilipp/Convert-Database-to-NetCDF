@@ -1,13 +1,27 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Script to convert database structured txt-files into netCDF format."""
+"""Script to convert database structured txt-files into netCDF format.
+
+For usage from command line see
+    python convert_db2nc.py -h
+
+Requirements:
+    - numpy
+    - netCDF4
+    - argparse
+
+Converter class: DB2NC
+
+Check out current version at
+https://github.com/Chilipp/Convert-Database-to-NetCDF
+"""
 import os
 import pickle
 from collections import OrderedDict
 from argparse import ArgumentParser
 from netCDF4 import Dataset
 from numpy import transpose, loadtxt, unique, shape, zeros, array, roll, \
-    dstack, ones
+    dstack, ones, set_printoptions, get_printoptions
 from numpy import all as npall
 from numpy import any as npany
 from numpy.ma import masked_where, filled
@@ -145,6 +159,12 @@ parser.add_argument(
     'mask',
     help=kwargdocs['init']['mask'],
     metavar='<<<mask-file>>>,<<<var1>>>,<<<var2>>>,...')
+parser.add_argument(
+    '-info',
+    help="""
+    Same as verbose option (-v) but only make the initialization, print
+    information on the final output and exit.""",
+    action='store_true')
 
 # spatial reference columns
 _colgrp = parser.add_argument_group(
@@ -248,8 +268,13 @@ def main(*args):
         opt = parser.parse_args(args)
     else:
         opt = parser.parse_args()
-    initkwargs, loopkwargs, outputkwargs = set_options(*args)
+    opt, initkwargs, loopkwargs, outputkwargs = set_options(*args)
     converter = DB2NC(**initkwargs)
+    if opt.info:  # if test option enabled, quit
+        converter.info()
+        return converter
+    elif opt.verbose:
+        converter.info()
     converter.convert(**loopkwargs)
     converter.output_nc(**outputkwargs)
     print(datetime.now()-t)
@@ -280,12 +305,12 @@ def set_options(*args):
                   if key in kwargdocs['convert']}
     outputkwargs = {key: val for key, val in vars(opt).items()
                     if key in kwargdocs['output']}
-    return initkwargs, loopkwargs, outputkwargs
+    return opt, initkwargs, loopkwargs, outputkwargs
 
 
 class Redistributer(object):
     """class which stores in data attribute how to redistribute the data"""
-    __slots__ = ('col', 'flag', 'data')
+    __slots__ = ('col', 'flag', 'data', 'ncfile', 'variables')
 
     def __init__(self, sortitem):
         splitteditem = sortitem.split(',')
@@ -294,6 +319,10 @@ class Redistributer(object):
         self.col = int(splitteditem[0])
         # flag attribute: Name of the flag which shall be redistributed
         self.flag = splitteditem[1]
+        self.ncfile = splitteditem[2]  # NetCDF file name
+        self.variables = {  # variables and their counterpart in ncfile
+            aliasflag: var for aliasflag, var in
+            izip(splitteditem[3::2], splitteditem[4::2])}
         # --- read redistribution data
         nco = Dataset(splitteditem[2])
         # data attribute: Dictionary with target flag as keys and
@@ -302,6 +331,12 @@ class Redistributer(object):
             aliasflag: nco.variables[var][0, :] for aliasflag, var in
             izip(splitteditem[3::2], splitteditem[4::2])}
         nco.close()
+
+    def info(self):
+        print('Redistribute %s in column %i with variables from %s' % (
+            self.flag, self.col, self.ncfile))
+        print('   Variables in NetCDF file correspond to %s' % (
+            ', '.join('%s (%s)' % item for item in self.variables.items())))
 
 
 class Adder(object):
@@ -422,6 +457,54 @@ class DB2NC(object):
         # set up how data shall be added to data array
         self._set_add()
 
+    def info(self):
+        """Print information about the DB2NC instance"""
+        # store current numpy print options
+        printops = get_printoptions()
+        # limit size of printed numpy arrays
+        set_printoptions(threshold=5, edgeitems=3)
+        # input file name
+        print('Input file: ' + self.ifile)
+        # mask file name
+        print('Mask file with grid informations: ' + self.maskfile)
+        # value column
+        print('Column containing value: %i' % self.valcol)
+        # grid columns
+        print('Columns containing spatial information: %s' % (
+            ', '.join(map(str, self.gridcols))))
+        # flag columns
+        print('Columns with flag definitions: %s' % (
+            ', '.join(map(str, self.flagcols))))
+        # concatenation columns
+        print('Columns that shall be concatenated: %s' % (
+            ', '.join(map(lambda x: ' and '.join(imap(str, x)),
+                          self.catcolpairs))))
+        # time column
+        print('Columns with time information: ' + (
+            ', '.join(map(str, self.timecols))))
+        # number of time steps
+        print('Number of timesteps found: %i' % self.ntimes)
+        # time information
+        print('Time data:\n%s' % (array(
+            map(datetime.isoformat, self.timedata))))
+        # original flags
+        for col, value in self.origuniqueflags.items():
+            print('Original flags in column %i:\n%s' % (col, ', '.join(value)))
+        # resorting option
+        for col, value in self.sortdict.items():
+            print('Sort options in column %i:\n%s' % (
+                col, ', '.join(
+                    '%s --> %s' % item for item in value.items())))
+        # redistribution option
+        for rd in self.redistdata:
+            rd.info()
+        # final names
+        print('---------------------------------------------')
+        print('Final names in NetCDF file:\n' +
+              ', '.join(self.finalnames))
+        # restore numpy print options
+        set_printoptions(**printops)
+
     def _set_cols(self, gridcols, time, defaultflags, cat, valcol):
         """function to set up column arrays.
 
@@ -452,6 +535,7 @@ class DB2NC(object):
 
     def _read_data(self, ifile, **kwargs):
         """function to read data from text input file during initialization"""
+        self.ifile = ifile
         self.data.ifiledata = loadtxt(ifile, dtype=str, delimiter='\t',
                                       usecols=self.usecols, unpack=True,
                                       **kwargs)
@@ -460,6 +544,7 @@ class DB2NC(object):
         """function to read in grid data from netCDF files during
         initialization"""
         # read mask data from mask file
+        self.maskfile = mask.split(',')[0]
         with Dataset(mask.split(',')[0]) as nco:
             data = [
                 nco.variables[varname][0, :] for varname in
@@ -497,7 +582,7 @@ class DB2NC(object):
                 ))
             self.ntimes = len(self.timedata)
         else:
-            self.timedata = [datetime.now()]
+            self.timedata = array([datetime.now()])
             self.ntimes = 1
 
     def _read_sorting(self, sort, **kwargs):
@@ -607,7 +692,7 @@ class DB2NC(object):
                     if col != sortitem.col and col in self.sortdict:
                         flags.insert(
                             catcol.index(col), unique(self.data.ifiledata[
-                                usecols.index(col)]).tolist())
+                                self.usecols.index(col)]).tolist())
                 try:
                     flags.remove([])
                 except ValueError:
