@@ -159,11 +159,17 @@ parser.add_argument(
     'mask',
     help=kwargdocs['init']['mask'],
     metavar='<<<mask-file>>>,<<<var1>>>,<<<var2>>>,...')
+parser.add_argument('-v', '--verbose', help=kwargdocs['convert']['verbose'],
+                      action='store_true')
 parser.add_argument(
     '-info',
     help="""
-    Same as verbose option (-v) but only make the initialization, print
+    Same as verbose option (-v) but only makes the initialization, print
     information on the final output and exit.""",
+    action='store_true')
+parser.add_argument(
+    '-noheader',
+    help=kwargdocs['init']['noheader'],
     action='store_true')
 
 # spatial reference columns
@@ -172,8 +178,8 @@ _colgrp = parser.add_argument_group(
     """Set up how the column shall be used.""")
 _colgrp.add_argument(
     '-gridcols',
-    help='Default: %(default)s. ' + kwargdocs['init']['gridcols'],
-    metavar='<<<gridcol>>>', default=[2, 3], type=int, nargs='*')
+    help=kwargdocs['init']['gridcols'],
+    metavar='<<<gridcol>>>', required=True, type=int, nargs='*')
 # flag columns
 _colgrp.add_argument(
     '-flagcols',
@@ -214,13 +220,7 @@ _colhandlegrp.add_argument(
         '[,<<<item2>>>,<< <var2>>>,...]'),
     nargs='*', default=[])
 # misc
-_miscgrp = parser.add_argument_group('Miscellaneous Options')
-_miscgrp.add_argument(
-    '-noheader',
-    help=kwargdocs['init']['noheader'],
-    action='store_true')
-_miscgrp.add_argument('-v', '--verbose', help=kwargdocs['convert']['verbose'],
-                      action='store_true')
+_miscgrp = parser.add_argument_group('Miscellaneous Output Options')
 _miscgrp.add_argument(
     '-o', '--output',
     help=' Default: %(default)s. ' + kwargdocs['output']['output'],
@@ -419,7 +419,7 @@ class Data(object):
 class DB2NC(object):
     """Class to convert database structured data to netCDF file"""
 
-    def __init__(self, ifile, gridcols, defaultflags, mask, alias=[],
+    def __init__(self, ifile, mask, gridcols, defaultflags=[], alias=[],
                  noheader=False, cat=[], sort=[], redistribute=[],
                  weights=None, valcol=-1, time=None):
         """Initialization function for DB2NC class"""
