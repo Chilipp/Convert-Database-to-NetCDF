@@ -179,17 +179,17 @@ _colgrp = parser.add_argument_group(
 _colgrp.add_argument(
     '-gridcols',
     help=kwargdocs['init']['gridcols'],
-    metavar='<<<gridcol>>>', required=True, type=int, nargs='*')
+    metavar='<<<gridcol>>>', required=True, type=int, nargs='+')
 # flag columns
 _colgrp.add_argument(
     '-flagcols',
     help=kwargdocs['init']['defaultflags'],
-    metavar='<<<flagcol>>>', type=int, default=[], nargs='*',
+    metavar='<<<flagcol>>>', type=int, default=[], nargs='+',
     dest='defaultflags')
 _colgrp.add_argument(
     '-cat',
     help=kwargdocs['init']['cat'],
-    nargs='*', dest='cat', metavar='<<<col1>>>,<<<col2>>>', default=[])
+    nargs='+', dest='cat', metavar='<<<col1>>>,<<<col2>>>', default=[])
 # value column
 _colgrp.add_argument(
     '-valcol',
@@ -199,7 +199,7 @@ _colgrp.add_argument(
 _colgrp.add_argument(
     '-t', '--time',
     help=kwargdocs['init']['time'],
-    metavar="<<<col>>>,<<<format>>>", nargs='*', default=None)
+    metavar="<<<col>>>,<<<format>>>", nargs='+', default=None)
 
 _colhandlegrp = parser.add_argument_group(
     'Special treatment of columns',
@@ -207,18 +207,18 @@ _colhandlegrp = parser.add_argument_group(
 _colhandlegrp.add_argument(
     '-alias',
     help=kwargdocs['init']['alias'],
-    metavar='<<<col>>>,<<<file>>>', nargs='*', default=[])
+    metavar='<<<col>>>,<<<file>>>', nargs='+', default=[])
 _colhandlegrp.add_argument(
     '-sort',
     help=kwargdocs['init']['sort'],
-    metavar='<<<col>>>,<<<file>>>', nargs='*', default=[])
+    metavar='<<<col>>>,<<<file>>>', nargs='+', default=[])
 _colhandlegrp.add_argument(
     '-rd', '--redistribute',
     help=kwargdocs['init']['redistribute'],
     metavar=(
         '<<<col>>>,<<<flag>>>,<<<file>>>,<<<item1>>>,<<<var1>>>'
         '[,<<<item2>>>,<< <var2>>>,...]'),
-    nargs='*', default=[])
+    nargs='+', default=[])
 # misc
 _miscgrp = parser.add_argument_group('Miscellaneous Output Options')
 _miscgrp.add_argument(
